@@ -36,20 +36,20 @@ class MainActivity : Activity() {
         layout.addView(Button(this).apply { text = "Open notification access"; setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).putExtra(":settings:fragment_args_key", ComponentName(this@MainActivity, PhoneNotificationListener::class.java).flattenToString()))
         } })
-        text("2. Pair with your T3 Code Bridge", 20f)
-        text("In the T3 Code Bridge app in Even, open Android notifications to generate a pairing code. Enter your private HTTPS T3 Code Bridge address below.")
+        text("2. Pair with your T3 Code Assistant", 20f)
+        text("In the T3 Code Assistant app in Even, open Android notifications to generate a pairing code. Enter your private HTTPS T3 Code Assistant address below.")
         val origin = EditText(this).apply { hint = "https://your-bridge.your-tailnet.ts.net"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI; setSingleLine(); setText(runtime.origin); importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO; layout.addView(this) }
         val code = EditText(this).apply { hint = "Pairing code"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; setSingleLine(); importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO; layout.addView(this) }
         val feedback = text("")
-        layout.addView(Button(this).apply { text = "Pair with T3 Code Bridge"; setOnClickListener {
+        layout.addView(Button(this).apply { text = "Pair with T3 Code Assistant"; setOnClickListener {
             isEnabled = false; feedback.text = "Pairing…"
             runtime.pair(origin.text.toString(), code.text.toString()) { error ->
                 isEnabled = true; feedback.text = error ?: "Paired. Enable your messaging apps in Even settings."; if (error == null) code.text.clear()
             }
         } })
-        layout.addView(Button(this).apply { text = "Disconnect from T3 Code Bridge"; setOnClickListener { runtime.disconnect() } })
+        layout.addView(Button(this).apply { text = "Disconnect from T3 Code Assistant"; setOnClickListener { runtime.disconnect() } })
         text("3. Choose apps in Even settings", 20f)
-        text("Apps start disabled. Signal, Google Messages, WhatsApp, Gmail, and other apps work when their individual notifications offer a compatible text reply. Keep your T3 Code Bridge reachable. Connection loss cancels unfinished replies on the glasses.")
+        text("Apps start disabled. Signal, Google Messages, WhatsApp, Gmail, and other apps work when their individual notifications offer a compatible text reply. Keep your T3 Code Assistant reachable. Connection loss cancels unfinished replies on the glasses.")
         layout.addView(Button(this).apply { text = "Open-source licenses"; setOnClickListener {
             val notices = TextView(this@MainActivity).apply {
                 text = listOf("LICENSE.txt", "THIRD_PARTY_NOTICES.txt").joinToString("\n\n") { asset ->

@@ -27,8 +27,8 @@ android {
         applicationId = "dev.evenbridge.companion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.1.2-beta.1"
+        versionCode = 4
+        versionName = "0.1.3-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig = true }
