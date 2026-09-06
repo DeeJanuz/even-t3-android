@@ -1,5 +1,7 @@
 package dev.evenbridge.companion
 
+import android.Manifest
+import android.os.Build
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ComponentName
@@ -13,6 +15,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.ScrollView
 import android.widget.TextView
 
@@ -20,7 +23,9 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var runtime: CompanionRuntime
     private lateinit var status: TextView
-    private val refresh = object : Runnable { override fun run() { status.text = "${runtime.status}\n${runtime.enabledCount} apps enabled in Even settings\nNotification access: ${if (runtime.listener != null) "connected" else "not connected"}"; handler.postDelayed(this, 1000) } }
+    private lateinit var wakeToggle: Switch
+    private lateinit var testWakeButton: Button
+    private val refresh = object : Runnable { override fun run() { status.text = "${runtime.status}\n${runtime.enabledCount} apps enabled in Even settings\nNotification access: ${if (runtime.listener != null) "connected" else "not connected"}\nDisplay alerts: ${if (runtime.wakeRelayEnabled) { if (runtime.wakePermissionGranted) "enabled" else "notification permission or channel needed" } else "off"}"; if (wakeToggle.isChecked != runtime.wakeRelayEnabled) wakeToggle.isChecked = runtime.wakeRelayEnabled; testWakeButton.isEnabled = runtime.wakeRelayEnabled && runtime.wakePermissionGranted; handler.postDelayed(this, 1000) } }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(0xfff4f6f2.toInt())
@@ -50,6 +55,36 @@ class MainActivity : Activity() {
         layout.addView(Button(this).apply { text = "Disconnect from T3 Code Assistant"; setOnClickListener { runtime.disconnect() } })
         text("3. Choose apps in Even settings", 20f)
         text("Apps start disabled. Signal, Google Messages, WhatsApp, Gmail, and other apps work when their individual notifications offer a compatible text reply. Keep your T3 Code Assistant reachable. Connection loss cancels unfinished replies on the glasses.")
+        text("4. Experimental display wake", 20f)
+        text("Enable Even Phone Companion in the Even app's notification settings and turn on Auto Display. These generic alerts contain no message text. Even controls whether sleeping glasses wake and how its native overlay handles taps. Our thread-opening dropdown works when T3 Code Assistant receives the tap.")
+        wakeToggle = Switch(this).apply {
+            text = "Relay alerts to Even Auto Display"
+            isChecked = runtime.wakeRelayEnabled
+            setOnClickListener {
+                val checked = isChecked
+                if (checked != runtime.wakeRelayEnabled) runtime.setWakeRelayEnabled(checked)
+                if (checked && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4701)
+                }
+            }
+            layout.addView(this)
+        }
+        testWakeButton = Button(this).apply {
+            text = "Send test display alert"
+            isEnabled = runtime.wakeRelayEnabled && runtime.wakePermissionGranted
+            setOnClickListener {
+                val posted = runtime.testDisplayAlert()
+                AlertDialog.Builder(this@MainActivity).setTitle(if (posted) "Test alert posted" else "Test alert not posted")
+                    .setMessage(if (posted) "Enable Even Phone Companion in Even's notification source list and turn on Auto Display. Then let the glasses sleep and send another test alert."
+                        else "Enable the relay and Android notifications, then wait three seconds before trying again.")
+                    .setPositiveButton("Close", null).show()
+            }
+            layout.addView(this)
+        }
+        text("Only new T3 replies and eligible notifications from enabled apps trigger alerts. Enabling or reconnecting skips existing notifications. To avoid two native alerts, disable the original messaging apps in Even's notification list while keeping them enabled in T3 Code Assistant. Android or Even background restrictions may prevent wake.")
+        layout.addView(Button(this).apply { text = "Android alert settings"; setOnClickListener {
+            startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName).putExtra(Settings.EXTRA_CHANNEL_ID, WakeNotification.CHANNEL))
+        } })
         layout.addView(Button(this).apply { text = "Open-source licenses"; setOnClickListener {
             val notices = TextView(this@MainActivity).apply {
                 text = listOf("LICENSE.txt", "THIRD_PARTY_NOTICES.txt").joinToString("\n\n") { asset ->

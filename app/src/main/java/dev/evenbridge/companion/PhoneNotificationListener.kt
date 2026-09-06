@@ -25,7 +25,7 @@ class PhoneNotificationListener : NotificationListenerService() {
     fun targets(enabled: Set<String>): List<ReplyTarget> = (activeNotifications ?: emptyArray()).mapNotNull { sbn ->
         try {
         // The phone is the only authority for active actions. Never deserialize an action from the bridge.
-        if (sbn.packageName !in enabled || sbn.user != Process.myUserHandle() || sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return@mapNotNull null
+        if (!Protocol.captureAllowed(sbn.packageName, packageName, enabled, BuildConfig.DEBUG, sbn.notification.channelId) || sbn.user != Process.myUserHandle() || sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return@mapNotNull null
         val candidates = sbn.notification.actions.orEmpty().filter { action ->
             action.actionIntent?.creatorPackage == sbn.packageName && action.remoteInputs.orEmpty().count { it.allowFreeFormInput } == 1 &&
                 !(Build.VERSION.SDK_INT >= 31 && action.actionIntent.isImmutable) &&

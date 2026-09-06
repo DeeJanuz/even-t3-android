@@ -29,6 +29,9 @@ class CompanionRuntime private constructor(private val context: Application) {
     private val client = OkHttpClient.Builder().callTimeout(4, TimeUnit.SECONDS).connectTimeout(3, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
     private val store = SecureStore(context)
+    private val wakeNotification = WakeNotification(context)
+    @Volatile var wakeRelayEnabled = false; private set
+    val wakePermissionGranted: Boolean get() = wakeNotification.allowed()
     private var state = JSONObject()
     @Volatile var status = "Not paired"; private set
     @Volatile var origin = ""; private set
@@ -43,7 +46,7 @@ class CompanionRuntime private constructor(private val context: Application) {
 
     init {
         worker.execute {
-            try { state = store.read(); origin = state.optString("origin"); paired = state.optString("token").isNotEmpty(); enabledCount = enabled().size }
+            try { state = store.read(); origin = state.optString("origin"); paired = state.optString("token").isNotEmpty(); enabledCount = enabled().size; wakeRelayEnabled = state.optBoolean("wakeRelayEnabled", false) }
             catch (_: Exception) { status = "Secure storage unavailable. Re-pair to reset." }
         }
         worker.scheduleWithFixedDelay({ sync() }, 0, 1, TimeUnit.SECONDS)
@@ -63,13 +66,19 @@ class CompanionRuntime private constructor(private val context: Application) {
                 val previous = if (state.optString("origin") == endpoint) state else JSONObject()
                 state = previous.put("origin", endpoint).put("token", token)
                 store.write(state)
-                origin = endpoint; paired = true; status = "Paired. Connecting…"
+                origin = endpoint; paired = true; wakeRelayEnabled = state.optBoolean("wakeRelayEnabled", false); status = "Paired. Connecting…"
                 main.post { done(null) }; sync()
             } catch (error: IllegalArgumentException) { main.post { done(error.message ?: "Check the bridge address and pairing code.") } }
             catch (_: Exception) { main.post { done("Pairing failed. Check HTTPS connectivity and generate a fresh code in Even settings.") } }
         }
     }
-    fun disconnect() { worker.execute { state.remove("token"); store.write(state); paired = false; status = "Disconnected" } }
+    fun testDisplayAlert(): Boolean = wakeRelayEnabled && wakeNotification.publishTest()
+    fun setWakeRelayEnabled(enabled: Boolean) { worker.execute {
+        state.put("wakeRelayEnabled", enabled); store.write(state); wakeRelayEnabled = enabled
+        if (!enabled) onMain { wakeNotification.cancel() }
+        sync()
+    } }
+    fun disconnect() { worker.execute { state.remove("token"); store.write(state); paired = false; status = "Disconnected"; onMain { wakeNotification.cancel() } } }
     private fun enabled(): Set<String> = arrayStrings(state.optJSONArray("enabledPackages"))
     private fun commandNow(): Long = maxOf(System.currentTimeMillis(), state.optLong("clockWatermark", 0))
     private fun arrayStrings(array: JSONArray?): Set<String> = (0 until (array?.length() ?: 0)).mapNotNull { array?.optString(it)?.takeIf { value -> value.isNotBlank() } }.toSet()
@@ -93,7 +102,7 @@ class CompanionRuntime private constructor(private val context: Application) {
     private fun apps(observed: Set<String>): JSONArray {
         if (System.currentTimeMillis() - inventoryTime > 30_000) {
             inventory = JSONArray()
-            context.packageManager.getInstalledApplications(0).map { app ->
+            context.packageManager.getInstalledApplications(0).filter { BuildConfig.DEBUG || it.packageName != context.packageName }.map { app ->
                 val label = runCatching { context.packageManager.getApplicationLabel(app) }.getOrNull()
                 JSONObject().put("packageName", app.packageName).put("name", Protocol.appLabel(app.packageName, label)).put("replyObserved", false)
             }.sortedBy { it.getString("name").lowercase() }.take(2048).forEach { inventory.put(it) }
@@ -123,6 +132,7 @@ class CompanionRuntime private constructor(private val context: Application) {
             val pending = state.optJSONArray("pending") ?: JSONArray()
             val payload = JSONObject().put("v", 1).put("apps", appList).put("notifications", notifications)
                 .put("enabledPackages", JSONArray(allowed.toList())).put("permissionGranted", service != null).put("results", pending)
+                .put("wakeRelayEnabled", wakeRelayEnabled && wakeNotification.allowed())
             // Fit the bounded protocol. Prefer newest notifications; never partially serialize a notification.
             for (target in targets.sortedByDescending { it.wire.getLong("arrivedAt") }.take(100)) {
                 notifications.put(target.wire)
@@ -141,10 +151,17 @@ class CompanionRuntime private constructor(private val context: Application) {
             require(commands.length() <= 32)
             val validatedCommands = (0 until commands.length()).map { Protocol.command(commands.getJSONObject(it)) }
             require(validatedCommands.map { it.id }.toSet().size == validatedCommands.size)
-            val newPending = JSONArray()
+            val wakeEvents = WakeEvent.batch(if (response.has("wakeEvents")) response.getJSONArray("wakeEvents") else JSONArray())
             val previousState = state.toString()
+            val wakeJournal = WakeJournal(state.optJSONObject("wakeJournal") ?: JSONObject())
+            val freshWakeEvents = wakeJournal.consume(wakeEvents, commandNow())
+            val newPending = JSONArray()
             state.put("enabledPackages", JSONArray(nextEnabled.toList())).put("pending", newPending).put("journal", journal.data)
+                .put("wakeJournal", wakeJournal.data)
+            if (freshWakeEvents.isNotEmpty()) state.put("clockWatermark", commandNow())
             if (state.toString() != previousState) store.write(state)
+            // Receipt commit precedes posting, so process death cannot replay a native wake.
+            if (wakeRelayEnabled && freshWakeEvents.isNotEmpty()) onMain { wakeNotification.publish(freshWakeEvents.filter { it.timely(commandNow()) }) }
             enabledCount = nextEnabled.size
             lastSuccess = System.currentTimeMillis()
             status = if (listener != null) "Connected · ${targets.size} replyable notifications" else "Connected · notification access needed"

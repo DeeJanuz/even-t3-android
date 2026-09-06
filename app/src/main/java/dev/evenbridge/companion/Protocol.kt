@@ -5,6 +5,8 @@ import java.security.MessageDigest
 import org.json.JSONObject
 
 object Protocol {
+    fun captureAllowed(source: String, ownPackage: String, enabled: Set<String>, debug: Boolean = false, channel: String? = null) =
+        source in enabled && (source != ownPackage || (debug && channel == "simulation"))
     fun endpoint(raw: String, debug: Boolean): String {
         val uri = URI(raw.trim())
         require(uri.userInfo == null && uri.query == null && uri.fragment == null && uri.host != null) { "Enter a bridge origin without credentials, path, or query." }

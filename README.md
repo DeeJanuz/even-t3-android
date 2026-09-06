@@ -2,7 +2,7 @@
 
 A small Android companion that forwards selected replyable notifications to [T3 Code Assistant for Even Realities G2](https://github.com/DeeJanuz/t3-code-assistant-bridge). Dictate and review replies on the glasses, then hand them back to the originating Android app.
 
-**Public beta:** 0.1.3-beta.1. Android 9+ is required. This is an independent community project, not an official Even Realities or messaging-app integration.
+**Public beta:** 0.1.4-beta.1. Android 9+ is required. This is an independent community project, not an official Even Realities or messaging-app integration.
 
 ## Install the beta
 
@@ -16,6 +16,18 @@ A small Android companion that forwards selected replyable notifications to [T3 
 The Android URL is an **origin**, for example `https://YOUR-COMPUTER.YOUR-TAILNET.ts.net:8443`. The Even Hub WebSocket field uses `wss://YOUR-COMPUTER.YOUR-TAILNET.ts.net:8443/v1/events`. Use the exact values supplied by your installer, not these placeholders. Release builds reject HTTP and do not bypass TLS certificate checks.
 
 No messaging-account login is required. Signal, Messages, WhatsApp, Gmail, and other apps work only when a notification supplies a compatible, unambiguous text-reply action. Read-only notifications, group summaries, work-profile notifications, and locked authentication-required actions are excluded. Configure the originating app to offer Reply if necessary.
+
+## Experimental glasses display wake
+
+Update the computer bridge and companion, then enable **Experimental display wake → Relay alerts to Even Auto Display**. Android 13+ requests permission to post notifications. Use **Android alert settings** if the permission or relay channel is disabled. The option starts off.
+
+Press **Send test display alert** once to make the companion appear in Even's notification source list. The button requires the relay toggle and Android notification permission/channel. It posts a generic local test through the same rate-limited notification path and sends no T3 or phone message.
+
+In the Even Realities app, enable Notifications, enable **Even Phone Companion** in its source list, and turn on **Auto Display**. To avoid duplicate native overlays for a tracked message, disable the original messaging apps in Even's source list while keeping those apps enabled in T3 Code Assistant's tracked-app list. Let the glasses sleep, then press **Send test display alert** again to check actual wake.
+
+New T3 replies and eligible tracked notifications produce one generic Android alert without message text. Existing content is skipped on enable/reconnect. Bursts replace the current alert, with at most one posting per three seconds; Android removes it after five seconds. This does not guarantee removal of Even's overlay. Receipt IDs and expiry times use the same encrypted storage as pairing; notification content is not added to storage. Release builds never capture their own notifications; debug builds allow only the shell-protected simulation channel, never the relay channel.
+
+[Even's Auto Display](https://support.evenrealities.com/hc/en-us/articles/14274501482639-Notifications) is the intended wake route. Sleeping-display wake was confirmed on the maintainer's phone/glasses with Even Notifications and Auto Display enabled; behavior on other devices still requires testing. Even owns its native overlay and may consume taps before the Hub app receives them. T3 Code Assistant 0.5.7 keeps its dropdown for ten seconds; swipe either direction dismisses the preview without marking it read, tap opens its conversation, and double tap in the reader returns to the interrupted view. Setting Even Display Time to five seconds is intended to leave roughly five seconds for the app dropdown, though the timers start independently. Tapping the Android notification on the phone opens this companion. A tap on the glasses' native overlay dismisses that overlay rather than opening a T3 thread.
 
 ## Behavior and privacy
 
